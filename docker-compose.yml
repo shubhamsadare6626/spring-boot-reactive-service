@@ -1,7 +1,7 @@
 version: '3'
 services:
-  spring-boot-job-service:
-    container_name: spring-boot-reactive-service 
+  spring-boot-reactive-service:
+    container_name: spring-boot-reactive-service
     image: personal/spring-boot-reactive-service
     ports:
       - "8084:8084"
@@ -10,5 +10,3 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${DATABASE_PASSWORD}
       - SPRING_DATASOURCE_HOST=${HOST_IP} #Public IPv4 address of aws -instance
       - SPRING_DATASOURCE_PORT=5432
-       
-

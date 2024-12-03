@@ -12,8 +12,8 @@ spring:
 #SMS provider 
 nexmo:
   api:
-    key: f067112a
-    secret: C9MT1PZ3BKagBi6m
+    key: ${PROVIDER_KEY}
+    secret: ${PROVIDER_SECRET}
 sms:
   message: |
     Hi %s, your order has been successfully placed.

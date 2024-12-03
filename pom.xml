@@ -82,8 +82,13 @@
             <artifactId>client</artifactId>
             <version>8.1.0</version>
         </dependency>
+        <!-- make sure .env file in src/main/resource folder -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>4.0.0</version>
+        </dependency>
     </dependencies>
-
     <build>
         <plugins>
             <plugin>
