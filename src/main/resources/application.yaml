@@ -1,0 +1,32 @@
+server:
+  port: 8084
+spring:
+  application:
+    name: spring-boot-reactive-service
+  datasource:
+    url: r2dbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/postgres
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: org.postgresql.Driver
+
+#SMS provider 
+nexmo:
+  api:
+    key: f067112a
+    secret: C9MT1PZ3BKagBi6m
+sms:
+  message: |
+    Hi %s, your order has been successfully placed.
+    Tracking Number: %s
+    Total Amount: $%s
+    Billing Address: %s
+
+    Thank you for shopping with us!
+# Logging
+logging:
+  level:
+    com.shubham: DEBUG
+    org.hibernate.stat: DEBUG
+    org.hibernate.sql: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} [%clr(%5p)][%clr(%15.15t){yellow}] --- %clr(%c{1}){blue} : %clr(%m){faint}%n"
