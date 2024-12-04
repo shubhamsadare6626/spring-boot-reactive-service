@@ -4,6 +4,7 @@ import com.shubham.reactive.adapter.VonageAdapter;
 import com.shubham.reactive.dtos.OrderDto;
 import com.shubham.reactive.entities.Client;
 import com.shubham.reactive.entities.Order;
+import com.shubham.reactive.handler.NotFoundException;
 import com.shubham.reactive.repositories.ClientRepository;
 import com.shubham.reactive.repositories.OrderRepository;
 import com.shubham.reactive.utils.SampleAsynchronus;
@@ -50,7 +51,7 @@ public class OrderService {
   private Mono<Client> validateClient(String clientId) {
     return clientRepository
         .findById(clientId)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with ID: " + clientId)));
+        .switchIfEmpty(Mono.error(new NotFoundException("Client not found with ID: " + clientId)));
   }
 
   private Mono<ClientOrderDto> saveOrder(OrderDto requestDto, Client client) {
@@ -79,7 +80,7 @@ public class OrderService {
   public Mono<OrderDto> findById(String id) {
     return orderRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Order not found for id: " + id)))
+        .switchIfEmpty(Mono.error(new NotFoundException("Order not found for id: " + id)))
         .map(this::toResponseDto)
         .log();
   }
@@ -91,7 +92,7 @@ public class OrderService {
     return orderRepository
         .findAll()
         .map(this::toResponseDto)
-        .delayElements(Duration.ofMillis(250)) // half half second
+        .delayElements(Duration.ofMillis(250))
         .log();
   }
 
@@ -105,16 +106,15 @@ public class OrderService {
     return orderRepository
         .findAllByClientId(clientId)
         .switchIfEmpty(
-            Flux.error(new RuntimeException("No orders found for client id: " + clientId)))
+            Flux.error(new NotFoundException("No orders found for client id: " + clientId)))
         .map(this::toResponseDto)
-        .delayElements(Duration.ofMillis(1000))
-        .log();
+        .delayElements(Duration.ofMillis(800));
   }
 
   public Mono<OrderDto> updateOrder(String id, OrderDto requestDto) {
     return orderRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Order not found with id: " + id)))
+        .switchIfEmpty(Mono.error(new NotFoundException("Order not found with id: " + id)))
         .flatMap(
             existingOrder ->
                 updateOrderEntityAsync(existingOrder, requestDto).flatMap(orderRepository::save))
@@ -129,7 +129,7 @@ public class OrderService {
   public Mono<Void> deleteOrder(String id) {
     return orderRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Order not found with id: " + id)))
+        .switchIfEmpty(Mono.error(new NotFoundException("Order not found with id: " + id)))
         .flatMap(orderRepository::delete)
         .doOnSuccess(aVoid -> log.info("Order deleted successfully with id: {}", id))
         .doOnError(this::logError);

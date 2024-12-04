@@ -3,6 +3,7 @@ package com.shubham.reactive.services;
 import com.shubham.reactive.dtos.ClientRequestDto;
 import com.shubham.reactive.dtos.ClientResponseDto;
 import com.shubham.reactive.entities.Client;
+import com.shubham.reactive.handler.NotFoundException;
 import com.shubham.reactive.mappers.ClientMapper;
 import com.shubham.reactive.repositories.ClientRepository;
 import java.time.Duration;
@@ -27,8 +28,9 @@ public class ClientService {
         .map(this::buildEntity)
         .flatMap(clientRepository::save)
         .map(clientMapper::clientToResponse)
-        .doOnSuccess(response -> log.info("Client created successfully: {}", response))
-        .doOnError(error -> log.error("Error creating client: {}", error.getMessage(), error))
+        .doOnSuccess(
+            response -> log.info("Client created successfully with id :{} ", response.getId()))
+        .doOnError(this::logError)
         .onErrorResume(
             error ->
                 Mono.error(new RuntimeException("Failed to create client: " + error.getMessage())));
@@ -38,18 +40,17 @@ public class ClientService {
   public Mono<ClientResponseDto> findById(String userId) {
     return clientRepository
         .findById(userId)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with ID: " + userId)))
-        .map(clientMapper::clientToResponse)
-        .doOnError(error -> log.error("Error fetching client: {}", error.getMessage(), error));
+        .switchIfEmpty(Mono.error(new NotFoundException("Client not found with ID: " + userId)))
+        .map(clientMapper::clientToResponse);
   }
 
   // Get All Clients
   public Flux<ClientResponseDto> getAllClients() {
     return clientRepository
         .findAll()
-        .delayElements(Duration.ofMillis(1500))
+        .delayElements(Duration.ofMillis(700))
         .map(clientMapper::clientToResponse)
-        .doOnError(error -> log.error("Error fetching all clients: {}", error.getMessage(), error));
+        .doOnError(this::logError);
   }
 
   // Elder Clients
@@ -61,8 +62,7 @@ public class ClientService {
         .log()
         .delayElements(Duration.ofMillis(1000))
         .map(clientMapper::clientToResponse)
-        .doOnError(
-            error -> log.error("Error fetching elder clients: {}", error.getMessage(), error));
+        .doOnError(this::logError);
   }
 
   // Migrated Clients
@@ -72,20 +72,20 @@ public class ClientService {
         .filter(Client::getMigrated)
         .delayElements(Duration.ofMillis(750))
         .map(clientMapper::clientToResponse)
-        .doOnError(
-            error -> log.error("Error fetching migrated clients: {}", error.getMessage(), error));
+        .doOnError(this::logError);
   }
 
   // Update Client
   public Mono<ClientResponseDto> updateClient(String id, ClientRequestDto requestDto) {
     return clientRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with Id: " + id)))
+        .switchIfEmpty(Mono.error(new NotFoundException("Client not found with Id: " + id)))
         .flatMap(existingClient -> updateEntity(existingClient, requestDto))
         .flatMap(clientRepository::save)
         .map(clientMapper::clientToResponse)
-        .doOnSuccess(response -> log.info("Client updated successfully: {}", response))
-        .doOnError(error -> log.error("Error updating client: {}", error.getMessage(), error))
+        .doOnSuccess(
+            response -> log.info("Client updated successfully for id: {}", response.getId()))
+        .doOnError(this::logError)
         .onErrorResume(
             error ->
                 Mono.error(new RuntimeException("Failed to update client: " + error.getMessage())));
@@ -95,10 +95,10 @@ public class ClientService {
   public Mono<Void> deleteClient(String id) {
     return clientRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with ID: " + id)))
+        .switchIfEmpty(Mono.error(new NotFoundException("Client not found with ID: " + id)))
         .flatMap(clientRepository::delete)
         .doOnSuccess(x -> log.info("Client deleted successfully with ID: {}", id))
-        .doOnError(error -> log.error("Error deleting client: {}", error.getMessage(), error));
+        .doOnError(this::logError);
   }
 
   // Helper Methods
@@ -114,6 +114,10 @@ public class ClientService {
         .migrated(requestDto.getMigrated())
         .password(requestDto.getPassword())
         .build();
+  }
+
+  private void logError(Throwable error) {
+    log.error("Error while Performing Client operation: {}", error.getMessage(), error);
   }
 
   private Mono<Client> updateEntity(Client existingClient, ClientRequestDto requestDto) {
