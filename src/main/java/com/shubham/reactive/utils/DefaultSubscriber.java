@@ -14,16 +14,16 @@ public class DefaultSubscriber<T> implements Subscriber<T> {
 
   @Override
   public void onNext(T t) {
-    log.info("onNext -- :{}", t);
+    log.info("onNext- :{}", t);
   }
 
   @Override
   public void onError(Throwable t) {
-    log.info("onError -- : {}", t);
+    log.info("onError- : {}", t);
   }
 
   @Override
   public void onComplete() {
-    log.info("onComplete -- : Completed");
+    log.info("onComplete- : Completed");
   }
 }
