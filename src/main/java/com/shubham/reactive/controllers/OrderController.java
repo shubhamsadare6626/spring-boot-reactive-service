@@ -5,6 +5,7 @@ import com.shubham.reactive.entities.Order;
 import com.shubham.reactive.services.OrderService;
 import com.shubham.reactive.services.OrderService.ClientOrderDto;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,7 +34,9 @@ public class OrderController {
     return orderService.getAllOrders();
   }
 
-  @GetMapping("/client/{clientId}")
+  // Stream event
+  //  SSE streaming endpoint
+  @GetMapping(path = "/client/{clientId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public Flux<OrderDto> getOrdersByClientId(@PathVariable String clientId) {
     return orderService.getOrdersByClientId(clientId);
   }

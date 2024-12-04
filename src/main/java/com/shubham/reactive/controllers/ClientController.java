@@ -32,14 +32,14 @@ public class ClientController {
     return clientService.getAllClients();
   }
 
-  @GetMapping("/elder")
-  public Flux<ClientResponseDto> getElderClients() {
-    return clientService.getElderClients();
+  @GetMapping("/elder/{age}")
+  public Flux<ClientResponseDto> getElderClients(@PathVariable String age) {
+    return clientService.getElderClients(age);
   }
 
   @GetMapping("/migrated")
   public Flux<ClientResponseDto> getMigrated() {
-    return clientService.getMigrated();
+    return clientService.getMigratedClients();
   }
 
   @PostMapping

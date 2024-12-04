@@ -5,6 +5,8 @@ import com.shubham.reactive.dtos.ClientResponseDto;
 import com.shubham.reactive.entities.Client;
 import com.shubham.reactive.mappers.ClientMapper;
 import com.shubham.reactive.repositories.ClientRepository;
+import java.time.Duration;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -13,108 +15,93 @@ import reactor.core.scheduler.Schedulers;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ClientService {
 
   private final ClientRepository clientRepository;
   private final ClientMapper clientMapper;
 
-  public ClientService(ClientRepository clientRepository, ClientMapper clientMapper) {
-    this.clientRepository = clientRepository;
-    this.clientMapper = clientMapper;
-  }
-
+  // Create Client
   public Mono<ClientResponseDto> createClient(ClientRequestDto requestDto) {
-    return Mono.defer(
-            () -> {
-              // Asynchronously build the entity to avoid blocking even during transformation.
-              Client entity = buildEntity(requestDto);
-              return clientRepository.save(entity);
-            })
+    return Mono.just(requestDto)
+        .map(this::buildEntity)
+        .flatMap(clientRepository::save)
         .map(clientMapper::clientToResponse)
         .doOnSuccess(response -> log.info("Client created successfully: {}", response))
-        .doOnError(error -> log.error("Error while creating client: {}", error.getMessage(), error))
+        .doOnError(error -> log.error("Error creating client: {}", error.getMessage(), error))
         .onErrorResume(
             error ->
                 Mono.error(new RuntimeException("Failed to create client: " + error.getMessage())));
   }
 
+  // Get Client by ID
   public Mono<ClientResponseDto> findById(String userId) {
     return clientRepository
         .findById(userId)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with id :" + userId)))
-        .map(clientMapper::clientToResponse);
+        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with ID: " + userId)))
+        .map(clientMapper::clientToResponse)
+        .doOnError(error -> log.error("Error fetching client: {}", error.getMessage(), error));
   }
 
+  // Get All Clients
   public Flux<ClientResponseDto> getAllClients() {
-    return clientRepository.findAll().map(clientMapper::clientToResponse);
-  }
-
-  public Flux<ClientResponseDto> getElderClients() {
     return clientRepository
         .findAll()
+        .delayElements(Duration.ofMillis(1500))
         .map(clientMapper::clientToResponse)
-        .filter(x -> x.getAge() > 30);
+        .doOnError(error -> log.error("Error fetching all clients: {}", error.getMessage(), error));
   }
 
-  public Flux<ClientResponseDto> getMigrated() {
-
-    Flux<Client> findAll = clientRepository.findAll();
-    Flux<String> usernameList = findAll.flatMap(data -> Flux.just(data.getUsername()));
-    usernameList.subscribe(log::info);
+  // Elder Clients
+  public Flux<ClientResponseDto> getElderClients(String age) {
     return clientRepository
         .findAll()
+        .filter(client -> client.getAge() > Integer.parseInt(age))
+        .flatMap(this::convertToLowercaseAsync)
+        .log()
+        .delayElements(Duration.ofMillis(1000))
         .map(clientMapper::clientToResponse)
-        .filter(x -> x.getMigrated().equals(Boolean.TRUE));
+        .doOnError(
+            error -> log.error("Error fetching elder clients: {}", error.getMessage(), error));
   }
 
+  // Migrated Clients
+  public Flux<ClientResponseDto> getMigratedClients() {
+    return clientRepository
+        .findAll()
+        .filter(Client::getMigrated)
+        .delayElements(Duration.ofMillis(750))
+        .map(clientMapper::clientToResponse)
+        .doOnError(
+            error -> log.error("Error fetching migrated clients: {}", error.getMessage(), error));
+  }
+
+  // Update Client
   public Mono<ClientResponseDto> updateClient(String id, ClientRequestDto requestDto) {
-
     return clientRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with id: " + id)))
-        .flatMap(
-            existingClient ->
-                updateEntityAsync(existingClient, requestDto).flatMap(clientRepository::save))
+        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with Id: " + id)))
+        .flatMap(existingClient -> updateEntity(existingClient, requestDto))
+        .flatMap(clientRepository::save)
         .map(clientMapper::clientToResponse)
         .doOnSuccess(response -> log.info("Client updated successfully: {}", response))
-        .doOnError(error -> log.error("Error during client update: {}", error.getMessage(), error))
+        .doOnError(error -> log.error("Error updating client: {}", error.getMessage(), error))
         .onErrorResume(
-            e -> Mono.error(new RuntimeException("Failed to update client: " + e.getMessage())));
+            error ->
+                Mono.error(new RuntimeException("Failed to update client: " + error.getMessage())));
   }
 
-  private Mono<Client> updateEntityAsync(Client existingClient, ClientRequestDto requestDto) {
-    return Mono.fromCallable(
-            () -> {
-              existingClient.setUsername(requestDto.getUsername());
-              existingClient.setFirstname(requestDto.getFirstname());
-              existingClient.setLastname(requestDto.getLastname());
-              existingClient.setEmail(requestDto.getEmail());
-              existingClient.setMobileNumber(requestDto.getMobileNumber());
-              existingClient.setStreetAddress(requestDto.getStreetAddress());
-              existingClient.setAge(requestDto.getAge());
-              existingClient.setMigrated(requestDto.getMigrated());
-              return existingClient;
-            })
-        .subscribeOn(
-            Schedulers.boundedElastic()); // Offload heavy computation to a bounded thread pool
-  }
-
+  // Delete Client
   public Mono<Void> deleteClient(String id) {
     return clientRepository
         .findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with id: " + id)))
+        .switchIfEmpty(Mono.error(new RuntimeException("Client not found with ID: " + id)))
         .flatMap(clientRepository::delete)
-        .onErrorResume(
-            error -> {
-              log.error(
-                  " Error while deleting client by id : {}. Reason: {} ",
-                  id,
-                  error.getMessage(),
-                  error);
-              return Mono.error(error);
-            });
+        .doOnSuccess(x -> log.info("Client deleted successfully with ID: {}", id))
+        .doOnError(error -> log.error("Error deleting client: {}", error.getMessage(), error));
   }
 
+  // Helper Methods
   private Client buildEntity(ClientRequestDto requestDto) {
     return Client.builder()
         .username(requestDto.getUsername())
@@ -127,5 +114,30 @@ public class ClientService {
         .migrated(requestDto.getMigrated())
         .password(requestDto.getPassword())
         .build();
+  }
+
+  private Mono<Client> updateEntity(Client existingClient, ClientRequestDto requestDto) {
+    return Mono.fromCallable(
+            () -> {
+              existingClient.setUsername(requestDto.getUsername());
+              existingClient.setFirstname(requestDto.getFirstname());
+              existingClient.setLastname(requestDto.getLastname());
+              existingClient.setEmail(requestDto.getEmail());
+              existingClient.setMobileNumber(requestDto.getMobileNumber());
+              existingClient.setStreetAddress(requestDto.getStreetAddress());
+              existingClient.setAge(requestDto.getAge());
+              existingClient.setMigrated(requestDto.getMigrated());
+              return existingClient;
+            })
+        .subscribeOn(Schedulers.boundedElastic());
+  }
+
+  private Mono<Client> convertToLowercaseAsync(Client client) {
+    return Mono.fromCallable(
+            () -> {
+              client.setUsername(client.getUsername().toLowerCase());
+              return client;
+            })
+        .subscribeOn(Schedulers.boundedElastic());
   }
 }

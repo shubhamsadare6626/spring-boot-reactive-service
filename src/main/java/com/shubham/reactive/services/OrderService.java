@@ -6,6 +6,7 @@ import com.shubham.reactive.entities.Client;
 import com.shubham.reactive.entities.Order;
 import com.shubham.reactive.repositories.ClientRepository;
 import com.shubham.reactive.repositories.OrderRepository;
+import com.shubham.reactive.utils.SampleAsynchronus;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Random;
@@ -37,7 +38,11 @@ public class OrderService {
   public Mono<ClientOrderDto> createOrder(OrderDto requestDto) {
     return validateClient(requestDto.getClientId())
         .flatMap(client -> saveOrder(requestDto, client))
-        .doOnSuccess(this::sendOrderSuccessNotification)
+        .flatMap(
+            orderDto ->
+                sendOrderSuccessNotification(orderDto)
+                    .thenReturn(orderDto) // Chain the notification logic
+            )
         .doOnError(this::logError)
         .onErrorResume(this::handleError);
   }
@@ -53,7 +58,7 @@ public class OrderService {
     return orderRepository.save(order).map(savedOrder -> buildClientOrderDto(savedOrder, client));
   }
 
-  private void sendOrderSuccessNotification(ClientOrderDto dto) {
+  private Mono<Void> sendOrderSuccessNotification(ClientOrderDto dto) {
     String message =
         String.format(
             messageFormat,
@@ -61,8 +66,14 @@ public class OrderService {
             dto.getTrackNumber(),
             dto.getTotalAmount(),
             dto.getBillingAddress());
-    log.info("Order created successfully: {}", dto);
-    vonageAdapter.sendSms(FROM, dto.getMobileNumber(), message).subscribe(); // Async SMS
+    log.info("Notification Thread :{}", Thread.currentThread().getName());
+    return vonageAdapter
+        .sendSms(FROM, dto.getMobileNumber(), message)
+        .doOnSuccess(
+            ignored -> log.info("Order success SMS sent for order: {}", dto.getTrackNumber()))
+        .doOnError(
+            error -> log.error("Failed to send SMS for order {}: {}", dto, error.getMessage()))
+        .then();
   }
 
   public Mono<OrderDto> findById(String id) {
@@ -75,11 +86,8 @@ public class OrderService {
 
   public Flux<OrderDto> getAllOrders() {
     log.info(
-        "Thread name: {} && active {} && stack traces {}",
-        Thread.currentThread().getName(),
-        Thread.activeCount(),
-        Thread.getAllStackTraces());
-
+        "Thread name: {} && active {} ", Thread.currentThread().getName(), Thread.activeCount());
+    SampleAsynchronus.sleepMilliSeconds(2000);
     return orderRepository
         .findAll()
         .map(this::toResponseDto)
@@ -92,11 +100,14 @@ public class OrderService {
   }
 
   public Flux<OrderDto> getOrdersByClientId(String clientId) {
+    log.info(
+        "Thread :{} & active count :{}", Thread.currentThread().getName(), Thread.activeCount());
     return orderRepository
         .findAllByClientId(clientId)
         .switchIfEmpty(
             Flux.error(new RuntimeException("No orders found for client id: " + clientId)))
         .map(this::toResponseDto)
+        .delayElements(Duration.ofMillis(1000))
         .log();
   }
 
